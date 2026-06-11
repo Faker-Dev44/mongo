@@ -1,3 +1,25 @@
+# Entorno Virtual
+venv/
+.venv/
+env/
+ENV/
+
+# Variables de Entorno y Credenciales (Seguridad)
+.env
+.env.local
+.env.*
+
+# Archivos de caché de Python
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Configuraciones de editores de código (Opcional, por si usan VS Code)
+.vscode/
+.idea/
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

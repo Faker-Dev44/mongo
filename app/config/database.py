@@ -1,4 +1,3 @@
-# app/config/database.py
 import os
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
@@ -16,4 +15,4 @@ client = AsyncIOMotorClient(MONGO_URI)
 
 #
 # SOLUCIÓN: Forzar el nombre de la base de datos directamente
-db = client["atrium_db"]
+db = client["atrium_db_ej"]
