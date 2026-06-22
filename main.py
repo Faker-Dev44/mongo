@@ -29,4 +29,4 @@ app.include_router(catalog.router)
 
 @app.get("/")
 async def root():
-    return {"message": "Microservicio activo"}
+    return {"status" : "online" ,"message": "Microservicio MongoDB activo"}
