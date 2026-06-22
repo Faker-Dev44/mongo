@@ -22,10 +22,11 @@ app.add_middleware(
 )
 #----Configuración de CORS
 
-
-
 app.include_router(artists.router)
 app.include_router(categories.router)
 app.include_router(artworks.router)
 app.include_router(catalog.router)
 
+@app.get("/")
+async def root():
+    return {"message": "Microservicio activo"}
