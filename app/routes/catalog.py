@@ -5,56 +5,55 @@ from typing import Optional
 
 router = APIRouter(prefix="/catalog", tags=["Catalog"])
 
+# Reemplazar el endpoint search_catalog en app/routes/catalog.py:
+
 @router.get("/search")
 async def search_catalog(
     genero_id: Optional[int] = Query(None, description="Filtrar por ID de género"),
-    estatus: Optional[str] = Query(None, description="Filtrar por estatus: Disponible, Reservada, Vendida"),
-    precio_max: Optional[float] = Query(None, description="Precio máximo de la obra")
+    estatus: Optional[str] = Query(None, description="Filtrar por estatus"),
+    precio_max: Optional[float] = Query(None, description="Precio máximo"),
+    page: int = Query(1, ge=1, description="Número de página de la consulta"),
+    limit: int = Query(12, ge=1, le=100, description="Cantidad de registros por página")
 ):
-    # 1. Inicializamos la tubería (Pipeline) de Agregación
     pipeline = []
 
-    # 2. Construimos los filtros dinámicos ($match)
+    # 1. Filtros dinámicos ($match)
     match_stage = {}
-    
     if genero_id is not None:
         match_stage["genero_id"] = genero_id
-        
     if estatus is not None:
         match_stage["estatus"] = estatus
-        
     if precio_max is not None:
-        # Filtra obras cuyo precio_obra sea menor o igual ($lte) al máximo enviado
         match_stage["precio_obra"] = {"$lte": precio_max}
 
-    # Si hay algún filtro, lo metemos como la primera etapa de la tubería
     if match_stage:
         pipeline.append({"$match": match_stage})
 
-    # 3. ETAPA DE RECOMPENSA (Justificación de Referencias para el Profesor)
-    # Hacemos un $lookup para unir la obra con su artista en una sola consulta indexada
+    # 2. OPTIMIZACIÓN DE PAGINACIÓN NO BLOQUEANTE (Antes del $lookup para ahorrar I/O)
+    skip_amount = (page - 1) * limit
+    pipeline.append({"$skip": skip_amount})
+    pipeline.append({"$limit": limit})
+
+    # 3. ETAPA DE LECTURA DE RELACIÓN ($lookup)
     pipeline.append({
         "$lookup": {
-            "from": "artists",            # Colección origen
-            "localField": "autor_id",     # Campo en la obra
-            "foreignField": "id_sql",     # Campo en el artista
-            "as": "informacion_artista"   # Nombre del array resultante
+            "from": "artists",
+            "localField": "autor_id",
+            "foreignField": "id_sql",
+            "as": "informacion_artista"
         }
     })
 
-    # 4. Limpiamos el array del lookup para que sea un objeto directo (opcional pero más limpio)
     pipeline.append({
         "$unwind": {
             "path": "$informacion_artista",
-            "preserveNullAndEmptyArrays": True # Por si la obra no tiene artista válido
+            "preserveNullAndEmptyArrays": True
         }
     })
 
-    # 5. Ejecutar la agregación en MongoDB Atlas
     cursor = db.artworks.aggregate(pipeline)
-    resultados = await cursor.to_list(length=100)
+    resultados = await cursor.to_list(length=limit)
 
-    # Limpieza de los ObjectIds de Mongo para evitar errores de serialización JSON
     for doc in resultados:
         doc["_id"] = str(doc["_id"])
         if "informacion_artista" in doc and doc["informacion_artista"]:
