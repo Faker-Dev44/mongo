@@ -15,4 +15,4 @@ client = AsyncIOMotorClient(MONGO_URI)
 
 #
 # SOLUCIÓN: Forzar el nombre de la base de datos directamente
-db = client["ATRIUM"]
+db = client["atrium_db_ej"]
