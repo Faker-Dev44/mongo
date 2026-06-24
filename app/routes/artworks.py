@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 from app.config.database import db
 from app.schemas.artwork import ArtworkCreate, ArtworkResponse
 
