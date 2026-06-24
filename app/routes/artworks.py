@@ -5,26 +5,32 @@ from app.schemas.artwork import ArtworkCreate, ArtworkResponse
 router = APIRouter(prefix="/artwork", tags=["Artworks"])
 
 # Endpoint - Create (Con doble validación cruzada: Artista y Género NoSQL)
-@router.post("/", response_model=ArtworkResponse | dict)
+@router.post("/", response_model=ArtworkResponse)
 async def create_artwork(artwork: ArtworkCreate):
-    # 1. Validar si el Autor/Artista existe en la colección 'artists' dev MongoDB
+    # 1. Validar si el Autor/Artista existe en la colección 'artists' de MongoDB
     artista = await db.artists.find_one({"id_sql": artwork.autor_id})
     if not artista:
-        return {"error": f"El artista con ID {artwork.autor_id} no existe en el catálogo NoSQL. No se puede crear la obra."}
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"El artista con ID {artwork.autor_id} no existe en el catálogo NoSQL. No se puede crear la obra."
+        )
 
     # 2. Buscar el Género/Categoría usando el genero_id de la obra
     categoria = await db.categories.find_one({"id_sql": artwork.genero_id})
     if not categoria:
-        return {"error": f"El género con ID {artwork.genero_id} no existe."}
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"El género con ID {artwork.genero_id} no existe en el catálogo NoSQL."
+        )
     
     # 3. Validar la estructura polimórfica (Requisitos específicos de las subtablas)
     requisitos = categoria.get("detalles", [])
     for campo_obligatorio in requisitos:
         if campo_obligatorio not in artwork.detalles:
-            return {
-                "error": "Validación de estructura NoSQL fallida",
-                "detalle": f"Para guardar este género, el diccionario 'detalles' debe incluir obligatoriamente el campo '{campo_obligatorio}'"
-            }
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Validación de estructura NoSQL fallida. El diccionario 'detalles' debe incluir obligatoriamente el campo '{campo_obligatorio}'"
+            )
             
     # 4. Guardar con éxito en MongoDB Atlas
     await db.artworks.insert_one(artwork.model_dump())
