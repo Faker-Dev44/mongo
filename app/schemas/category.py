@@ -1,20 +1,15 @@
-from pydantic import BaseModel,Field
-#Importante utilizar solo esas importaciones para realizar los Schemas
-#De aqui para abajo, se deben realizar los 'Schemas'
-#Para cosas opcionales utilizar el operador: '|' que significa 'O'
+from pydantic import BaseModel, Field
 
 class CategoryBase(BaseModel):
-    id_sql: int = Field(..., description="ID de la categoría en SQL")
-    detalles: list[str] = Field(..., description="Lista de detalles requeridos para esta categoría")
+    id_sql: int = Field(..., description="ID de la categoría en PostgreSQL")
+    nombre_categoria: str = Field(..., description="Nombre del género o disciplina")
+    detalles: dict[str, str] = Field(
+        ..., 
+        description="Mapeo de atributos y sus tipos de datos (Ej: {'duracion': 'Integer', 'fps': 'Decimal', 'resolucion': 'String', 'es_color': 'Boolean'})"
+    )
 
-#CategoryCreate
-#Este 'scheme' heredara simplemente de 'CategoryBase'
 class CategoryCreate(CategoryBase):
     pass
 
-#CategoryResponse
-#Este 'scheme' heredara simplemente de 'CategoryBase'
 class CategoryResponse(CategoryBase):
     pass
-
-

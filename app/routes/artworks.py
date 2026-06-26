@@ -1,71 +1,88 @@
 from fastapi import APIRouter, HTTPException, status
 from app.config.database import db
 from app.schemas.artwork import ArtworkCreate, ArtworkResponse
+import re
 
 router = APIRouter(prefix="/artwork", tags=["Artworks"])
 
-# Endpoint - Create (Con doble validación cruzada: Artista y Género NoSQL)
 @router.post("/", response_model=ArtworkResponse)
 async def create_artwork(artwork: ArtworkCreate):
-    # 1. Validar si el Autor/Artista existe en la colección 'artists' de MongoDB
+    # 1. Validar existencia del artista
     artista = await db.artists.find_one({"id_sql": artwork.autor_id})
     if not artista:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"El artista con ID {artwork.autor_id} no existe en el catálogo NoSQL. No se puede crear la obra."
+            detail=f"El artista con ID {artwork.autor_id} no existe en MongoDB."
         )
 
-    # 2. Buscar el Género/Categoría usando el genero_id de la obra
+    # 2. Validar existencia de la categoría
     categoria = await db.categories.find_one({"id_sql": artwork.genero_id})
     if not categoria:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"El género con ID {artwork.genero_id} no existe en el catálogo NoSQL."
+            detail=f"El género con ID {artwork.genero_id} no existe en MongoDB."
         )
     
-    # 3. Validar la estructura polimórfica (Requisitos específicos de las subtablas)
-    requisitos = categoria.get("detalles", [])
-    for campo_obligatorio in requisitos:
-        if campo_obligatorio not in artwork.detalles:
+    # 3. Validar y tipar los atributos polimórficos de la obra de forma dinámica
+    definicion_atributos = categoria.get("detalles", {})
+    
+    for campo_esperado, tipo_esperado in definicion_atributos.items():
+        if campo_esperado not in artwork.detalles:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Validación de estructura NoSQL fallida. El diccionario 'detalles' debe incluir obligatoriamente el campo '{campo_obligatorio}'"
+                detail=f"Falta el atributo técnico requerido: '{campo_esperado}'"
             )
             
-    # 4. Guardar con éxito en MongoDB Atlas
+        valor_recibido = artwork.detalles[campo_esperado].strip()
+        
+        # Validar tipo de dato
+        if tipo_esperado == "Integer":
+            if not re.match(r"^-?\d+$", valor_recibido):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"El campo '{campo_esperado}' debe ser un número entero válido."
+                )
+        elif tipo_esperado == "Decimal":
+            if not re.match(r"^-?\d+(\.\d+)?$", valor_recibido):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"El campo '{campo_esperado}' debe ser un número decimal válido."
+                )
+        elif tipo_esperado == "Boolean":
+            if valor_recibido.lower() not in ["true", "false", "1", "0", "sí", "no"]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"El campo '{campo_esperado}' debe ser un booleano (true/false)."
+                )
+        # Si es 'String', se acepta cualquier valor de texto
+
+    # 4. Inserción del documento
     await db.artworks.insert_one(artwork.model_dump())
     return artwork
 
-# Endpoint - Get All
 @router.get("/", response_model=list[ArtworkResponse])
 async def read_artwork_all():
     cursor = db.artworks.find()
-    artworks_db = await cursor.to_list(length=100)
-    return artworks_db
+    return await cursor.to_list(length=1000)
 
-# Endpoint - Get por ID SQL
 @router.get("/{id}", response_model=ArtworkResponse | dict)
 async def read_artwork_id(id: int):
     artwork = await db.artworks.find_one({"id_sql": id})
     if not artwork:
-        return {"error": f"Obra con ID {id} no encontrada."}
+        return {"error": "Obra no encontrada."}
     return artwork
 
-# Endpoint - Update
 @router.put("/{id}")
 async def update_artwork_id(id: int, artwork: ArtworkCreate):
-    # Primero verificamos si el autor o género nuevos son válidos antes de actualizar
     artista = await db.artists.find_one({"id_sql": artwork.autor_id})
     categoria = await db.categories.find_one({"id_sql": artwork.genero_id})
-    
     if not artista or not categoria:
         return {"error": "Actualización rechazada. 'autor_id' o 'genero_id' inválidos."}
 
     await db.artworks.update_one({"id_sql": id}, {"$set": artwork.model_dump()})
-    return {"msg": "Obra actualizada correctamente", "id_sql": id}
+    return {"msg": "Obra actualizada", "id_sql": id}
 
-# Endpoint - Delete
 @router.delete("/{id}")
 async def delete_artwork_id(id: int):
     await db.artworks.delete_one({"id_sql": id})
-    return {"msg": "Obra borrada del catálogo", "id_sql": id}
+    return {"msg": "Obra eliminada", "id_sql": id}
